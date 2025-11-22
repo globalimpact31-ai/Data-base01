@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>FLAMES — Classic Elegance</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Optional: If you don't have styles.css, this basic style makes it look okay */
+    body { font-family: sans-serif; padding: 20px; background: #f3f4f6; }
+    .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+    .btn { padding: 10px 20px; cursor: pointer; }
+    .letters { display: flex; gap: 5px; margin: 20px 0; font-weight: bold; font-size: 1.2rem; }
+    .letter { padding: 10px; border: 1px solid #ddd; }
+    .letter.removed { opacity: 0.3; text-decoration: line-through; background: #fee; }
+    .final-card { text-align: center; margin-top: 20px; padding: 20px; background: #e0f2fe; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <h1 class="title">FLAMES Game</h1>
+      <p class="lead">Enter two names to check your relationship.</p>
+    </header>
+
+    <section class="card form-card">
+      <div class="grid">
+        <label class="field">
+          <span class="field-label">Name A</span>
+          <input id="nameA" class="input" placeholder="e.g. Alice" />
+        </label>
+        <label class="field">
+          <span class="field-label">Name B</span>
+          <input id="nameB" class="input" placeholder="e.g. Bob" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="resetBtn" class="btn ghost">Reset</button>
+        <button id="runBtn" class="btn primary">Check</button>
+      </div>
+    </section>
+
+    <section class="card visualizer">
+      <div id="letters" class="letters"></div>
+      <div id="final" class="final"></div>
+    </section>
+
+    <footer class="footer">
+      <br><small>F=Friendship, L=Love, A=Affection, M=Marriage, E=Enemy, S=Sibling</small>
+    </footer>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ==========================================================
+  // 1. PASTE YOUR GOOGLE SCRIPT URL BELOW
+  // ==========================================================
+  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx.../exec"; 
+  // Example: "https://script.google.com/macros/s/AKfycbx.../exec"
+  // ==========================================================
+
+  const LETTERS = ['F', 'L', 'A', 'M', 'E', 'S'];
+
+  // Function to send data to Google Sheets
+  function sendToSheet(nameA, nameB, resultLetter) {
+    if (WEBAPP_URL.includes("PASTE_YOUR")) {
+      console.error("Error: You have not updated the WEBAPP_URL in the code!");
+      alert("Error: Please open the HTML file and paste your Google Web App URL.");
+      return;
+    }
+
+    const resultTitle = {
+      F: 'Friendship', L: 'Love', A: 'Affection', 
+      M: 'Marriage', E: 'Enemy', S: 'Sibling'
+    }[resultLetter] || resultLetter;
+
+    console.log("Sending to sheet:", nameA, nameB, resultTitle);
+
+    fetch(WEBAPP_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nameA: nameA, nameB: nameB, result: resultTitle })
+    }).then(() => console.log("Data sent successfully."))
+      .catch(err => console.error("Failed to send data:", err));
+  }
+
+  // Icons for the final result
+  const icons = {
+    F: '🤝 Friendship', L: '❤️ Love', A: '🥰 Affection',
+    M: '💍 Marriage', E: '⚔️ Enemy', S: '🤞 Sibling'
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const nameA = document.getElementById('nameA');
+    const nameB = document.getElementById('nameB');
+    const lettersEl = document.getElementById('letters');
+    const finalEl = document.getElementById('final');
+    const runBtn = document.getElementById('runBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function sanitize(s) {
+      return (s || '').toLowerCase().replace(/[^a-z]/g, '');
+    }
+
+    function countRemaining(a, b) {
+      const sa = sanitize(a).split('');
+      const sb = sanitize(b).split('');
+      for (let i = 0; i < sa.length; i++) {
+        const ch = sa[i];
+        const idx = sb.indexOf(ch);
+        if (idx !== -1) { sa[i] = ''; sb[idx] = ''; }
+      }
+      return sa.concat(sb).filter(Boolean).length;
+    }
+
+    function renderLetters(arr, highlightRemoved) {
+      lettersEl.innerHTML = '';
+      arr.forEach(letter => {
+        const d = document.createElement('div');
+        d.className = 'letter';
+        if (highlightRemoved === letter) d.classList.add('removed');
+        d.textContent = letter;
+        lettersEl.appendChild(d);
+      });
+    }
+
+    function showFinal(letter) {
+      finalEl.innerHTML = '';
+      const block = document.createElement('div');
+      block.className = 'final-card';
+      block.innerHTML = `<h2>${icons[letter]}</h2><p>Result: <strong>${letter}</strong></p>`;
+      finalEl.appendChild(block);
+    }
+
+    function disableControls(disabled) {
+      runBtn.disabled = disabled;
+      resetBtn.disabled = disabled;
+      if(disabled) runBtn.textContent = "...";
+      else runBtn.textContent = "Check";
+    }
+
+    function computeAndAnimate() {
+      const aVal = (nameA.value || '').trim();
+      const bVal = (nameB.value || '').trim();
+      if (!aVal || !bVal) {
+        alert('Please enter both names.');
+        return;
+      }
+
+      disableControls(true);
+      finalEl.innerHTML = '';
+
+      const count = countRemaining(aVal, bVal);
+
+      // Case 1: Identical names (Sibling)
+      if (count === 0) {
+        renderLetters(LETTERS);
+        setTimeout(() => {
+          renderLetters(['S']);
+          showFinal('S');
+          
+          // --- SEND TO GOOGLE SHEET ---
+          sendToSheet(aVal, bVal, 'S');
+          // ----------------------------
+
+          disableControls(false);
+        }, 600);
+        return;
+      }
+
+      let arr = [...LETTERS];
+      const steps = [{ remaining: [...arr], removed: undefined }];
+      while (arr.length > 1) {
+        const removeIndex = (count - 1) % arr.length;
+        const removed = arr.splice(removeIndex, 1)[0];
+        steps.push({ remaining: [...arr], removed });
+        arr = [...arr.slice(removeIndex), ...arr.slice(0, removeIndex)];
+      }
+
+      let idx = 0;
+      renderLetters(steps[0].remaining);
+
+      const interval = setInterval(() => {
+        idx++;
+        if (idx >= steps.length) {
+          clearInterval(interval);
+          const finalLetter = steps[steps.length - 1].remaining[0] || LETTERS[0];
+          renderLetters([finalLetter]);
+          showFinal(finalLetter);
+
+          // --- SEND TO GOOGLE SHEET ---
+          sendToSheet(aVal, bVal, finalLetter);
+          // ----------------------------
+
+          disableControls(false);
+          return;
+        }
+
+        const s = steps[idx];
+        renderLetters([...(s.remaining || []), s.removed].filter(Boolean), s.removed);
+        setTimeout(() => { renderLetters(s.remaining || []); }, 320);
+      }, 640);
+    }
+
+    // Initialization
+    renderLetters(LETTERS);
+    runBtn.addEventListener('click', computeAndAnimate);
+    
+    resetBtn.addEventListener('click', () => {
+      nameA.value = ''; nameB.value = ''; finalEl.innerHTML = '';
+      renderLetters(LETTERS); nameA.focus();
+    });
+  });
+})();
+</script>
+</body>
+</html>
